@@ -492,6 +492,19 @@ const playlist = [
 ];
 const playlistYtMusicUrl = "";
 
+// Fisher–Yates shuffle, done in place.
+function shuffleArray(arr){
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Randomize the order once on page load, so it's not the same sequence
+// every visit.
+shuffleArray(playlist);
+
 function slotDecimalHour(s){
   return s.hour + (s.minute || 0) / 60;
 }
@@ -642,22 +655,9 @@ function togglePlayPause(){
   else { ytPlayer.playVideo(); setPlaying(true); }
 }
 
-// Toggled by the radio button — seeds YouTube's own auto-generated "Mix"
-// off whatever song is actually playing right now (curated or already-radio),
-// not tied to any fixed song. Clicking it again drops back into the
-// curated list at wherever it was left off.
-function toggleRadioMode(){
-  if(isRadioMode){
-    isRadioMode = false;
-    radioBtn.classList.remove('active');
-    radioBtn.setAttribute('aria-label', 'Start radio from this song');
-    updateSongUI();
-    if(playerReady && isPlaying){
-      ytPlayer.loadVideoById(playlist[currentSongIdx].videoId);
-    }
-    return;
-  }
-
+// Turns radio mode on, seeded off whatever song is actually playing right
+// now (curated or already-radio) — not tied to any fixed song.
+function startRadio(){
   let seedId = playlist[currentSongIdx].videoId;
   if(playerReady && typeof ytPlayer.getVideoData === 'function'){
     const data = ytPlayer.getVideoData();
@@ -674,6 +674,23 @@ function toggleRadioMode(){
   }
 }
 
+// Turns radio off and drops back into the curated list right where it was
+// left (currentSongIdx is untouched while radio mode runs).
+function stopRadio(){
+  isRadioMode = false;
+  radioBtn.classList.remove('active');
+  radioBtn.setAttribute('aria-label', 'Start radio from this song');
+  updateSongUI();
+  if(playerReady && isPlaying){
+    ytPlayer.loadVideoById(playlist[currentSongIdx].videoId);
+  }
+}
+
+// Toggled by the radio button.
+function toggleRadioMode(){
+  if(isRadioMode){ stopRadio(); } else { startRadio(); }
+}
+
 function goNext(){
   if(isRadioMode){
     // Already in the endless mix — just tell YouTube to advance its own
@@ -681,11 +698,19 @@ function goNext(){
     if(playerReady) ytPlayer.nextVideo();
     return;
   }
-  currentSongIdx = (currentSongIdx + 1) % playlist.length;
-  updateSongUI();
-  if(playerReady && isPlaying){
-    ytPlayer.loadVideoById(playlist[currentSongIdx].videoId);
+  if(currentSongIdx + 1 < playlist.length){
+    currentSongIdx++;
+    updateSongUI();
+    if(playerReady && isPlaying){
+      ytPlayer.loadVideoById(playlist[currentSongIdx].videoId);
+    }
+    return;
   }
+  // That was the last curated song — hand off to radio automatically
+  // instead of looping back to the start.
+  shuffleArray(playlist); // fresh order queued up for whenever radio gets turned off
+  currentSongIdx = 0;
+  startRadio();
 }
 
 function applySlot(idx){
